@@ -17,7 +17,10 @@ local _M = {}
 local cjson = require "cjson.safe"
 local pl_stringx = require "pl.stringx"
 local http = require "resty.http"
-local crypto = require "crypto"
+-- local crypto = require "crypto"
+local cipher = require "openssl.cipher"
+local rand = require "openssl.rand"
+local digest = require"openssl.digest"
 
 local OAUTH_CALLBACK = "^%s/oauth2/callback(/?(\\?[^\\s]*)*)$"
 
@@ -119,11 +122,23 @@ function redirect_to_auth( conf, callback_url )
 end
 
 function encode_token(token, conf)
-    return ngx.encode_base64(crypto.encrypt("aes-128-cbc", token, crypto.digest('md5',conf.client_secret)))
+    local key = digest.new('sha256')
+    key:update(conf.client_secret)
+
+    return ngx.encode_base64(cipher.new("aes-256-cbc"):encrypt(key):final(token))
+    -- return ngx.encode_base64(crypto.encrypt("aes-128-cbc", token, crypto.digest('md5',conf.client_secret)))
 end
 
 function decode_token(token, conf)
-    status, token = pcall(function () return crypto.decrypt("aes-128-cbc", ngx.decode_base64(token), crypto.digest('md5',conf.client_secret)) end)
+    status, token = pcall(function () 
+        local key = digest.new('sha256')
+        key:update(conf.client_secret)
+
+        return cipher.new("aes-256-cbc"):decrypt(key):final(ngx.decode_base64(token))
+        -- return crypto.decrypt("aes-128-cbc", ngx.decode_base64(token), crypto.digest('md5',conf.client_secret)) 
+    end)
+
+    -- status, token = pcall(function () return crypto.decrypt("aes-128-cbc", ngx.decode_base64(token), crypto.digest('md5',conf.client_secret)) end)
     if status then
         return token
     else
