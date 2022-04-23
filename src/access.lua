@@ -17,7 +17,6 @@ local _M = {}
 local cjson = require "cjson.safe"
 local pl_stringx = require "pl.stringx"
 local http = require "resty.http"
--- local crypto = require "crypto"
 local cipher = require "openssl.cipher"
 local rand = require "openssl.rand"
 local digest = require"openssl.digest"
@@ -28,8 +27,8 @@ function _M.run(conf)
      -- Check if the API has a request_path and if it's being invoked with the path resolver
     local path_prefix = ""
 
-    if ngx.ctx.api.uris ~= nil then
-        for index, value in ipairs(ngx.ctx.api.uris) do
+    if ngx.ctx.route.paths ~= nil then
+        for index, value in ipairs(ngx.ctx.route.paths) do
             if pl_stringx.startswith(ngx.var.request_uri, value) then
                 path_prefix = value
                 break
@@ -39,7 +38,6 @@ function _M.run(conf)
         if pl_stringx.endswith(path_prefix, "/") then
             path_prefix = path_prefix:sub(1, path_prefix:len() - 1)
         end
-
     end
 
     local callback_url = ngx.var.scheme .. "://" .. ngx.var.host ..  ":" .. ngx.var.server_port .. path_prefix .. "/oauth2/callback"
@@ -64,7 +62,7 @@ function _M.run(conf)
                 local httpc = http:new()
                 local res, err = httpc:request_uri(conf.user_url, {
                     method = "GET",
-                    ssl_verify = false,
+                    -- ssl_verify = false,
                     headers = {
                       ["Authorization"] = "Bearer " .. access_token,
                     }
@@ -154,7 +152,7 @@ function  handle_callback( conf, callback_url )
         local httpc = http:new()
         local res, err = httpc:request_uri(conf.token_url, {
             method = "POST",
-            ssl_verify = false,
+            -- ssl_verify = false,
             body = "grant_type=authorization_code&client_id=" .. conf.client_id .. "&client_secret=" .. conf.client_secret .. "&code=" .. args.code .. "&redirect_uri=" .. callback_url,
             headers = {
               ["Content-Type"] = "application/x-www-form-urlencoded",
@@ -180,7 +178,8 @@ function  handle_callback( conf, callback_url )
         if redirect_back then
             return ngx.redirect(redirect_back)
         else
-            return ngx.redirect(ngx.ctx.api.request_path)
+            ngx.say("No Redirect Cookie")
+            ngx.exit(ngx.HTTP_BAD_REQUEST)
         end
     else
         ngx.say("User has denied access to the resources.")
